@@ -10,6 +10,7 @@ const port = process.env.PORT || 5000
 app.use(cors({
     origin: [
         'http://localhost:5173',
+        'https://handicraft-businesses-server.vercel.app',
         'https://handicraft-businesses.netlify.app',
     ],
     // credentials: true,
