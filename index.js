@@ -1,6 +1,8 @@
+const { MongoClient, ServerApiVersion } = require('mongodb');
 const express = require('express');
 const cors = require('cors');
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const jwt = require('jsonwebtoken');
+const cookieParser = require('cookie-parser');
 
 const app = express();
 const port = process.env.PORT || 5000
@@ -10,14 +12,15 @@ const port = process.env.PORT || 5000
 app.use(cors({
     origin: [
         'http://localhost:5173',
+        'http://localhost:5174',
         'https://handicraft-businesses-server.vercel.app',
-        'https://handicraft-businesses.netlify.app',
+        'https://bangladeshi-handicrafts.web.app',
     ],
-    // credentials: true,
-    // optionsSuccessStatus: 200,
+    credentials: true,
+    optionsSuccessStatus: 200,
 }));
 app.use(express.json());
-// app.use(cookieParser());
+app.use(cookieParser());
 
 require('dotenv').config()
 
@@ -33,10 +36,62 @@ const client = new MongoClient(uri, {
     }
 });
 
+
+const cookieOption = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production' ? true : false,
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
+};
+
+// user MiddleWare
+const verifyToken = async (req, res, next) => {
+    const token = req.cookies?.token;
+    if (!token) {
+        return res.status(401).send({ message: 'unauthorized access' })
+    }
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+        if (err) {
+            return res.status(401).send({ message: 'unauthorized access' })
+        }
+        req.user = decoded;
+        next();
+    })
+}
+
+
 async function run() {
     try {
 
         const userCollection = client.db('handicraftDB').collection('users')
+
+        // jwt
+        app.post('/jwt', async (req, res) => {
+            const user = req.body;
+            console.log(user);
+
+            const token = jwt.sign(
+                user,
+                process.env.ACCESS_TOKEN_SECRET,
+                {
+                    expiresIn: '30d'
+                }
+            )
+
+            res
+                .cookie('token', token, cookieOption)
+                .send({ success: true })
+        });
+
+        app.get('/logout', async (req, res) => {
+            const user = req.body;
+            console.log('logging out', user);
+            res
+                .clearCookie('token', {
+                    ...cookieOption,
+                    maxAge: 0
+                })
+                .send({ success: true })
+        })
 
         // User
         app.get('/users', async (req, res) => {
@@ -51,6 +106,20 @@ async function run() {
             const result = await userCollection.insertOne(user);
             res.send(result);
         })
+
+        app.patch('/users', async (req, res) => {
+            const user = req.body
+            const filter = { email: user.email };
+            const updatedDoc = {
+                $set: {
+                    lastLoginAt: user.lastLoginAt
+                }
+            }
+
+            const result = await userCollection.updateOne(filter, updatedDoc);
+            res.send(result);
+        })
+
 
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
