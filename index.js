@@ -1,4 +1,4 @@
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
@@ -6,7 +6,6 @@ const cookieParser = require('cookie-parser');
 
 const app = express();
 const port = process.env.PORT || 5000
-
 
 // Middleware
 app.use(cors({
@@ -63,6 +62,8 @@ async function run() {
     try {
 
         const userCollection = client.db('handicraftDB').collection('users')
+        const shopCollection = client.db('handicraftDB').collection('shop')
+        const orderCollection = client.db('handicraftDB').collection('order')
 
         // jwt
         app.post('/jwt', async (req, res) => {
@@ -99,6 +100,12 @@ async function run() {
             const users = await cursor.toArray();
             res.send(users);
         })
+        app.get('/users/:email', async (req, res) => {
+            const email = req.params.email;
+            const cursor = userCollection.findOne((user) => user.email === email);
+
+            res.send(cursor);
+        })
 
         app.post('/users', async (req, res) => {
             const user = req.body;
@@ -117,6 +124,72 @@ async function run() {
             }
 
             const result = await userCollection.updateOne(filter, updatedDoc);
+            res.send(result);
+        })
+
+        app.put('/users/:email', (req, res) => {
+            const email = req.params.email;
+            const { fullName, phoneNumber, imageUrl, address } = req.body;
+
+            // Find the user by email
+            const userIndex = users.findIndex((user) => user.email === email);
+
+            if (userIndex !== -1) {
+                // Update user info
+                users[userIndex] = {
+                    ...users[userIndex],
+                    name: fullName,
+                    phoneNumber,
+                    photoURL: imageUrl,
+                    address,
+                };
+
+                // Respond with the updated user
+                res.status(200).json({ message: 'Profile updated successfully!', user: users[userIndex] });
+            } else {
+                // User not found
+                res.status(404).json({ message: 'User not found' });
+            }
+        });
+
+
+        // shop
+        app.get('/shop', async (req, res) => {
+            const shop = await shopCollection.find().toArray();
+            res.send(shop);
+        })
+        app.get('/shop/:id', async (req, res) => {
+            const id = req.params.id;
+
+            const queary = { _id: new ObjectId(id) };
+
+            const result = await shopCollection.findOne(queary);
+            if (result) {
+                res.send(result);
+            } else {
+                res.status(404).send({ message: 'Product not found' });
+            }
+        })
+
+        // order
+        app.get('/order', async (req, res) => {
+            const cursor = await orderCollection.find().toArray();
+            res.send(cursor);
+        })
+
+        app.post('/order', async (req, res) => {
+            const order = req.body;
+            const { productId, quantity } = order;
+            console.log('order: ', order);
+
+            const result = await orderCollection.insertOne(order);
+            res.json(result);
+        })
+
+        app.get('/order/:email', async (req, res) => {
+            const email = req.params.email;
+            const queary = { userEmail: email };
+            const result = await orderCollection.find(queary).toArray();
             res.send(result);
         })
 
